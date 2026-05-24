@@ -162,7 +162,7 @@ html, body {
   cursor: pointer;
   transition: background var(--transition);
   position: relative;
-  group: 1;
+  
 }
 
 .file-item:hover {
@@ -344,18 +344,29 @@ html, body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
-  cursor: text;
+  cursor: pointer;
+  user-select: none;
   outline: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 60px;
+  transition: color var(--transition), background var(--transition);
 }
 
 .th-label:focus {
   color: var(--accent);
   background: var(--accent-dim);
   border-radius: var(--radius-sm);
+}
+
+.th-label:hover {
+  color: var(--accent);
+}
+
+.th-label.is-editing {
+  cursor: text;
+  user-select: text;
 }
 
 .th-delete {

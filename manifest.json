@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuvIlUCYtUMla3ibmrhhArBJsHvtRFCaz57ItO+uVpr2qXJcXmUxxrJBg7j7FyfTKv+XHIBCwijV45t5CwMjCVmiY1woLMlrJIkUmtmvBYdt314i77MV7iEc/aIZrmLfAbTMGjvulFG4mvvVoNmnZ6wtTC0bm2O9nJm0H3MsTkUHl8jXyMcS5rAInXUBQq2R2gShmHdor2xVFwcz9f4DXS6DYKX12Rb3GmHz0Q3eRdmPkOBui3IIyAKX4sFMUkaNlZGejKNV1hZrU/rK6oAzKk3tc6O6jWjNfybIq0BwDvgS9GcYOla0aShBX7P7Pxs1SoCWEbfqRn6OYHGDIPIk4rwIDAQAB",
   "name": "CSV Notes",
   "version": "2.0.0",
   "description": "Manage CSV files in a spreadsheet-like popup interface with cloud sync.",

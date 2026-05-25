@@ -1,6 +1,6 @@
 ﻿# CSV Notes
 
-A lightweight Chrome extension that provides a small spreadsheet-like popup for creating, editing, importing, and exporting CSV files. Changes are saved locally via `chrome.storage.local` — no backend required.
+A lightweight Chrome extension that provides a spreadsheet-like popup for creating, editing, importing, and exporting CSV files. Changes are saved locally via `chrome.storage.local`, with optional cloud sync via Supabase.
 
 ---
 
@@ -8,8 +8,9 @@ A lightweight Chrome extension that provides a small spreadsheet-like popup for 
 
 - Features
 - Quick install
+- Cloud sync (optional)
 - Usage
-- Developer notes
+- Architecture
 - Storage format
 - Troubleshooting
 - Contributing
@@ -23,6 +24,9 @@ A lightweight Chrome extension that provides a small spreadsheet-like popup for 
 - Spreadsheet-style inline editing (cells & headers)
 - Add / delete rows and columns
 - Auto-save to `chrome.storage.local`
+- **Cloud sync with Google login** (optional Supabase)
+- **Cross-device sync** (when logged in)
+- **Offline-first** - works without internet, syncs when available
 - Import local `.csv` files (uses PapaParse)
 - Export CSV from the active file
 - Small, dependency-free UI (Vanilla JS + PapaParse)
@@ -35,17 +39,15 @@ A lightweight Chrome extension that provides a small spreadsheet-like popup for 
 
 2. Extract / unzip the archive.
 
-3. Ensure the following file exists:
+3. Ensure the following files exist:
 
 ```text
 libs/papaparse.min.js
 ```
 
-Download it from:
+Download it from: https://www.papaparse.com/
 
-https://www.papaparse.com/
-
-if missing.
+(Cloud sync is optional - see section below)
 
 4. Open Chrome and go to:
 
@@ -66,6 +68,39 @@ Load unpacked
 8. The extension should now appear in Chrome.
 
 9. Optionally pin the extension from the toolbar puzzle icon.
+
+---
+
+## Cloud Sync (Optional)
+
+CSV Notes supports optional cloud sync via Supabase. All features work offline with local storage.
+
+### To enable cloud sync:
+
+1. Follow the setup guide in [`SETUP.md`](SETUP.md)
+2. Create a Supabase project and get your credentials
+3. Download `libs/supabase.min.js` from CDN
+4. Update `services/supabase.js` with your Supabase URL and key
+5. Enable Google OAuth in your Supabase project
+6. Reload the extension in `chrome://extensions`
+
+### Cloud sync features:
+
+- **Google Login**: Sign in with your Google account
+- **Auto-sync**: Files sync automatically to Supabase (2-second debounce)
+- **Cross-device**: Access your CSV files from any device
+- **Offline support**: Changes work offline, sync when online
+- **Privacy**: Row Level Security (RLS) ensures users only access their own files
+
+### How it works:
+
+- **Not logged in**: Use local storage only (no sync)
+- **Logged in**: Files sync to Supabase, cached locally for offline
+- **Offline edits**: Changes save locally, sync when online
+- **Logout**: Local cache preserved, cloud sync disabled
+
+See [`SETUP.md`](SETUP.md) for detailed Supabase configuration.
+
 ---
 
 ## Usage
@@ -77,26 +112,137 @@ Load unpacked
 - Click a cell and type to edit; changes auto-save.
 - Use **Import** to load a local `.csv` file; the app uses PapaParse to parse CSVs.
 - Use **Export** to download the active CSV.
+- **(Optional) Click Login** to enable cloud sync with Google
 
 Keyboard notes:
 - `Enter` and `Tab` move between cells (and create a new row at the end).
 
 ---
 
-## Developer notes
+## Architecture
 
-- Main UI: `popup/popup.html`, `popup/popup.css`, `popup/popup.js`
-- Storage wrapper: `storage/storage.js` (uses `chrome.storage.local` with key `csvNotes`)
-- CSV parsing: `libs/papaparse.min.js`
-- Manifest: `manifest.json` (Manifest V3)
+### Storage System
 
-To run or modify locally, load the unpacked extension into Chrome as described above.
+The extension uses a **unified storage adapter** that abstracts local and cloud storage:
+
+```
+StorageAdapter (unified API)
+  ├── LocalStorage (chrome.storage.local)
+  ├── CloudStorage (Supabase PostgreSQL)
+  └── AuthService (Google OAuth)
+```
+
+**Files:**
+
+- **`storage/localStorage.js`** - Chrome storage wrapper with async API
+- **`storage/cloudStorage.js`** - Supabase database operations
+- **`storage/storageAdapter.js`** - Unified interface, auto-chooses local or cloud
+- **`services/supabase.js`** - Supabase client initialization
+- **`services/auth.js`** - Google OAuth and auth state management
+
+### Sync Behavior
+
+1. **No auth**: Use local storage only
+2. **Logged in**: Sync to cloud, cache locally
+3. **Offline**: Changes work locally, sync when online
+4. **Debounce**: 2-second delay before syncing (prevents frequent requests)
+5. **Merge**: Newer cloud files override local on load
+
+### UI Enhancements
+
+- Added auth bar with login/logout buttons
+- Sync status indicator (idle/syncing/error)
+- User email display when logged in
+- Automatic UI updates on auth state change
 
 ---
 
-## Storage format
+## Developer Notes
 
-Data is persisted under the `csvNotes` key in `chrome.storage.local`. Example structure:
+### File Structure
+
+```
+Mini-CSV/
+├── services/
+│   ├── supabase.js       (Supabase client initialization)
+│   └── auth.js           (Google OAuth logic)
+├── storage/
+│   ├── localStorage.js   (Chrome storage wrapper)
+│   ├── cloudStorage.js   (Supabase CRUD operations)
+│   ├── storageAdapter.js (Unified interface)
+│   └── storage.js        (Legacy - kept for reference)
+├── popup/
+│   ├── popup.html        (UI with auth buttons)
+│   ├── popup.css         (Styles including auth bar)
+│   └── popup.js          (Main app logic with cloud sync)
+├── libs/
+│   ├── papaparse.min.js  (CSV parsing library)
+│   └── supabase.min.js   (Supabase JS client - optional)
+├── assets/
+│   └── icon128.png       (Extension icon)
+├── manifest.json         (Extension configuration)
+├── SETUP.md              (Cloud sync setup guide)
+└── README.md             (This file)
+```
+
+### Key Implementation Details
+
+**StorageAdapter Pattern:**
+- Automatically chooses local or cloud based on auth state
+- Implements debounced autosave (2 seconds)
+- Provides fallback if cloud sync fails
+- Merges cloud files with local cache on login
+
+**Auth Flow:**
+- Extension checks for existing session on load
+- Auth state changes trigger UI and data updates
+- Successful login triggers cloud file sync
+- Logout preserves local cache for privacy
+
+**Error Handling:**
+- Cloud sync failures fall back to local storage
+- Sync indicator shows status (idle/syncing/error)
+- Failed syncs auto-retry on next edit
+- Offline changes persist locally
+
+### API Reference
+
+**StorageAdapter:**
+```javascript
+await StorageAdapter.setCurrentUser(user)
+await StorageAdapter.getFiles()
+await StorageAdapter.getFile(filename)
+await StorageAdapter.saveFile(name, data)         // Debounced
+await StorageAdapter.createFile(name)
+await StorageAdapter.deleteFile(name)
+await StorageAdapter.renameFile(old, new)
+await StorageAdapter.setActiveFile(name)
+```
+
+**AuthService:**
+```javascript
+await AuthService.signInWithGoogle()
+await AuthService.signOut()
+await AuthService.getCurrentUser()
+await AuthService.getSession()
+AuthService.onAuthStateChange(callback)
+```
+
+**CloudStorage:**
+```javascript
+await CloudStorage.fetchCloudFiles(userId)
+await CloudStorage.saveCloudFile(name, data, userId)
+await CloudStorage.deleteCloudFile(fileId)
+CloudStorage.isAvailable()
+```
+
+---
+
+## Storage Format
+
+### Local Storage
+
+Data is persisted under the `csvNotes` key in `chrome.storage.local`:
 
 ```js
 {
@@ -112,7 +258,15 @@ Data is persisted under the `csvNotes` key in `chrome.storage.local`. Example st
 }
 ```
 
-The storage API is implemented in `storage/storage.js`.
+### Cloud Storage (Supabase)
+
+Files are stored in the `csv_files` table with:
+- `id`: UUID file identifier
+- `user_id`: User's Supabase ID
+- `filename`: User-facing filename
+- `headers`: JSON array of column names
+- `rows`: JSON array of row data
+- `updated_at`: Last modification timestamp
 
 ---
 

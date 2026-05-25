@@ -39,6 +39,27 @@ html, body {
   font-size: 13px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+/* Light theme overrides applied when body has .theme-light */
+body.theme-light {
+  --bg-base:        #ffffff;
+  --bg-surface:     #f6f7fb;
+  --bg-elevated:    #ffffff;
+  --bg-hover:       #f0f3ff;
+  --bg-active:      #eef2ff;
+  --border:         #e6e9f2;
+  --border-light:   #dde3f7;
+  --accent:         #2563eb;
+  --accent-hover:   #1e4fd8;
+  --accent-dim:     #cfe0ff;
+  --text-primary:   #0b1220;
+  --text-secondary: #374151;
+  --text-muted:     #6b7280;
+  --danger:         #b91c1c;
+  --danger-hover:   #991515;
+  --success:        #0f9d58;
 }
 
 .app {
@@ -46,6 +67,93 @@ html, body {
   flex-direction: column;
   width: 800px;
   height: 600px;
+}
+
+/* ─── Auth Bar ─── */
+.auth-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--accent-dim);
+  border-bottom: 1px solid var(--accent);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.auth-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.sync-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.sync-indicator.syncing {
+  background: var(--success);
+  animation: pulse-active 1s ease-in-out infinite;
+}
+
+.sync-indicator.error {
+  background: var(--danger);
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes pulse-active {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.user-email {
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-auth {
+  padding: 4px 10px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 120ms ease;
+}
+
+.btn-auth:hover {
+  background: var(--accent-hover);
+}
+
+.btn-auth.btn-logout {
+  background: var(--danger);
+}
+
+.btn-auth.btn-logout:hover {
+  background: var(--danger-hover);
 }
 
 /* ─── Header ─── */

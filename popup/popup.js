@@ -40,8 +40,24 @@ const importInput = document.getElementById('import-input');
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 async function init() {
-  const data = await Storage.getAll();
+  // Initialize Supabase
+  SupabaseService.initSupabase();
 
+  // Set up auth state listener
+  setupAuthListener();
+
+  // Initialize theme
+  await initTheme();
+
+  // Check for existing session
+  const session = await AuthService.getSession();
+  if (session && session.user) {
+    await StorageAdapter.setCurrentUser(session.user);
+    updateAuthUI(session.user);
+  }
+
+  // Load files
+  const data = await getAppData();
   state.files = data.files || {};
   state.activeFile = data.activeFile || null;
 
@@ -54,6 +70,66 @@ async function init() {
   }
 
   attachGlobalListeners();
+}
+
+/**
+ * Get app data from storage adapter (cloud or local)
+ */
+async function getAppData() {
+  try {
+    const files = await StorageAdapter.getFiles();
+    const activeFile = await StorageAdapter.getActiveFile();
+    return { files, activeFile };
+  } catch (err) {
+    console.error('Failed to load files:', err);
+    return { files: {}, activeFile: null };
+  }
+}
+
+/**
+ * Setup auth state change listener
+ */
+function setupAuthListener() {
+  try {
+    AuthService.onAuthStateChange(async (event, session) => {
+      console.log('Auth event:', event);
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        await StorageAdapter.setCurrentUser(session.user);
+        updateAuthUI(session.user);
+        // Reload files from cloud
+        state.files = await StorageAdapter.getFiles();
+        renderFileList();
+      } else if (event === 'SIGNED_OUT') {
+        await StorageAdapter.setCurrentUser(null);
+        updateAuthUI(null);
+        // Reload files (will use local storage)
+        state.files = await StorageAdapter.getFiles();
+        renderFileList();
+      }
+    });
+  } catch (err) {
+    console.warn('Auth listener setup failed:', err);
+  }
+}
+
+/**
+ * Update auth UI elements
+ */
+function updateAuthUI(user) {
+  const btnLogin = document.getElementById('btn-login');
+  const btnLogout = document.getElementById('btn-logout');
+  const userEmail = document.getElementById('user-email');
+
+  if (user) {
+    btnLogin.style.display = 'none';
+    btnLogout.style.display = 'inline-block';
+    userEmail.textContent = user.email || 'Synced';
+  } else {
+    btnLogin.style.display = 'inline-block';
+    btnLogout.style.display = 'none';
+    userEmail.textContent = '';
+  }
 }
 
 // ─── File list rendering ─────────────────────────────────────────────────────
@@ -114,7 +190,7 @@ async function selectFile(filename) {
   state.activeFile = filename;
   resetSortState();
 
-  await Storage.setActiveFile(filename);
+  await StorageAdapter.setActiveFile(filename);
 
   renderFileList();
   renderSpreadsheet(filename);
@@ -583,7 +659,17 @@ async function persistActiveFile() {
 
   if (!file) return;
 
-  await Storage.saveFile(state.activeFile, file);
+  // Update sync indicator
+  setSyncStatus('syncing');
+
+  try {
+    await StorageAdapter.saveFile(state.activeFile, file);
+    setSyncStatus('idle');
+  } catch (err) {
+    console.error('Failed to save file:', err);
+    setSyncStatus('error');
+    setTimeout(() => setSyncStatus('idle'), 2000);
+  }
 }
 
 // ─── Create new file ──────────────────────────────────────────────────────────
@@ -595,7 +681,7 @@ function promptNewFile() {
     if (!filename) return;
 
     try {
-      const fileData = await Storage.createFile(filename);
+      const fileData = await StorageAdapter.createFile(filename);
 
       state.files[filename] = fileData;
       state.activeFile = filename;
@@ -616,11 +702,11 @@ function confirmDelete(filename) {
     'Delete CSV',
     `Are you sure you want to delete "${filename}"? This cannot be undone.`,
     async () => {
-      const nextActive = await Storage.deleteFile(filename);
+      await StorageAdapter.deleteFile(filename);
 
       delete state.files[filename];
 
-      state.activeFile = nextActive;
+      state.activeFile = await StorageAdapter.getActiveFile();
       resetSortState();
 
       renderFileList();
@@ -682,14 +768,14 @@ function handleImport(file) {
         rows,
       };
 
-      await Storage.saveFile(filename, fileData);
+      await StorageAdapter.saveFile(filename, fileData);
 
       state.files[filename] = fileData;
 
       state.activeFile = filename;
-        resetSortState();
+      resetSortState();
 
-      await Storage.setActiveFile(filename);
+      await StorageAdapter.setActiveFile(filename);
 
       renderFileList();
       renderSpreadsheet(filename);
@@ -1063,6 +1149,136 @@ function attachGlobalListeners() {
 
     exportActiveFile();
   });
+
+  // Auth listeners
+  document.getElementById('btn-login').addEventListener('click', handleLogin);
+  document.getElementById('btn-logout').addEventListener('click', handleLogout);
+
+  // Manual sync button
+  const btnSync = document.getElementById('btn-sync');
+  if (btnSync) {
+    btnSync.addEventListener('click', async () => {
+      setSyncStatus('syncing');
+      try {
+        await StorageAdapter.manualSyncAll();
+        setSyncStatus('idle');
+        showToast('Sync complete');
+      } catch (err) {
+        console.error('Manual sync failed:', err);
+        setSyncStatus('error');
+        showToast('Sync failed');
+      }
+    });
+  }
+
+  // Theme toggle
+  const btnTheme = document.getElementById('btn-theme');
+  if (btnTheme) {
+    btnTheme.addEventListener('click', async () => {
+      const current = document.body.classList.contains('theme-light') ? 'light' : 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      try {
+        await chrome.storage.local.set({ theme: next });
+      } catch (e) {
+        // ignore
+      }
+    });
+  }
+
+  // Listen for storage sync events
+  window.addEventListener('storage-sync', (e) => {
+    try {
+      const d = e.detail || {};
+      if (d.status === 'syncing') setSyncStatus('syncing');
+      else if (d.status === 'synced') setSyncStatus('idle');
+      else if (d.status === 'error') setSyncStatus('error');
+    } catch (err) {
+      // ignore
+    }
+  });
+}
+
+/**
+ * Handle login button click
+ */
+async function handleLogin() {
+  try {
+    const result = await AuthService.signInWithGoogle();
+    if (result && result.session && result.session.user) {
+      // Session obtained
+      await StorageAdapter.setCurrentUser(result.session.user);
+      updateAuthUI(result.session.user);
+      showToast('Logged in');
+    } else if (result && result.user) {
+      // Some SDKs return { user }
+      await StorageAdapter.setCurrentUser(result.user);
+      updateAuthUI(result.user);
+      showToast('Logged in');
+    } else {
+      showToast('Login cancelled or failed');
+    }
+  } catch (err) {
+    console.error('Login error:', err);
+    showToast('Login failed: ' + err.message);
+  }
+}
+
+/**
+ * Handle logout button click
+ */
+async function handleLogout() {
+  try {
+    await AuthService.signOut();
+    await StorageAdapter.setCurrentUser(null);
+    updateAuthUI(null);
+    showToast('Logged out');
+  } catch (err) {
+    console.error('Logout error:', err);
+    showToast('Logout failed');
+  }
+}
+
+// Theme initialization
+async function initTheme() {
+  try {
+    const res = await chrome.storage.local.get('theme');
+    const pref = res && res.theme ? res.theme : null;
+    const systemPrefDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = pref ? pref : (systemPrefDark ? 'dark' : 'light');
+    applyTheme(theme);
+  } catch (err) {
+    const systemPrefDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(systemPrefDark ? 'dark' : 'light');
+  }
+}
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.body.classList.add('theme-light');
+  } else {
+    document.body.classList.remove('theme-light');
+  }
+}
+
+/**
+ * Update sync status indicator
+ */
+function setSyncStatus(status) {
+  const indicator = document.getElementById('sync-indicator');
+  if (!indicator) return;
+
+  indicator.classList.remove('syncing', 'error');
+
+  if (status === 'syncing') {
+    indicator.classList.add('syncing');
+    indicator.title = 'Syncing...';
+  } else if (status === 'error') {
+    indicator.classList.add('error');
+    indicator.title = 'Sync failed - will retry';
+  } else {
+    indicator.title = 'Synced';
+  }
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

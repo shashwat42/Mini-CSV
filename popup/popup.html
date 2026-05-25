@@ -9,6 +9,20 @@
 <body>
   <div class="app">
 
+    <!-- Auth Status Bar -->
+    <div class="auth-bar" id="auth-bar">
+      <div class="auth-status">
+        <span class="sync-indicator" id="sync-indicator" title="Sync status">◯</span>
+        <span class="user-email" id="user-email"></span>
+      </div>
+      <div class="auth-buttons">
+        <button class="btn-icon" id="btn-sync" title="Sync now">⟳</button>
+        <button class="btn-icon" id="btn-theme" title="Toggle theme">🌗</button>
+        <button class="btn-auth" id="btn-login" title="Login with Google">Login</button>
+        <button class="btn-auth btn-logout" id="btn-logout" style="display: none;" title="Logout">Logout</button>
+      </div>
+    </div>
+
     <!-- Header -->
     <header class="header">
       <div class="header-left">
@@ -67,7 +81,12 @@
   </div>
 
   <script src="../libs/papaparse.min.js"></script>
-  <script src="../storage/storage.js"></script>
+  <script src="../libs/supabase.min.js"></script>
+  <script src="../services/supabase.js"></script>
+  <script src="../services/auth.js"></script>
+  <script src="../storage/localStorage.js"></script>
+  <script src="../storage/cloudStorage.js"></script>
+  <script src="../storage/storageAdapter.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

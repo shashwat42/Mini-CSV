@@ -1,0 +1,14 @@
+{
+  "name": "mini-csv",
+  "version": "1.0.0",
+  "description": "CSV Notes - Lightweight CSV editor with cloud sync",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "install-deps": "npm install && npm run build-dist",
+    "build-dist": "mkdir -p libs && cp node_modules/@supabase/supabase-js/dist/module/index.js libs/supabase.min.js"
+  }
+}

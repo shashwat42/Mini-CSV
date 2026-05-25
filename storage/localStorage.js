@@ -1,20 +1,17 @@
 'use strict';
 
 /**
- * DEPRECATED: This module has been replaced by the modular storage system:
- * 
- * - storage/localStorage.js   (Chrome storage wrapper)
- * - storage/cloudStorage.js   (Supabase operations)
- * - storage/storageAdapter.js (Unified interface)
- * 
- * This file is kept for reference/backward compatibility.
- * Use StorageAdapter instead for new code.
+ * Local Storage Module
+ * Wraps chrome.storage.local with a consistent async API
+ * Used for offline-first caching and when user is not logged in
  */
 
-const Storage = (() => {
-
+const LocalStorage = (() => {
   const STORAGE_KEY = 'csvNotes';
 
+  /**
+   * Get all data from storage
+   */
   async function getAll() {
     return new Promise((resolve) => {
       chrome.storage.local.get(STORAGE_KEY, (result) => {
@@ -28,33 +25,34 @@ const Storage = (() => {
     });
   }
 
+  /**
+   * Save all data
+   */
   async function saveAll(data) {
     return new Promise((resolve) => {
       chrome.storage.local.set({ [STORAGE_KEY]: data }, resolve);
     });
   }
 
+  /**
+   * Get all CSV files
+   */
   async function getFiles() {
     const data = await getAll();
     return data.files || {};
   }
 
-  async function getActiveFile() {
-    const data = await getAll();
-    return data.activeFile || null;
-  }
-
-  async function setActiveFile(filename) {
-    const data = await getAll();
-    data.activeFile = filename;
-    await saveAll(data);
-  }
-
+  /**
+   * Get a single file by name
+   */
   async function getFile(filename) {
     const files = await getFiles();
     return files[filename] || null;
   }
 
+  /**
+   * Save a single file
+   */
   async function saveFile(filename, fileData) {
     const data = await getAll();
     if (!data.files) data.files = {};
@@ -65,6 +63,22 @@ const Storage = (() => {
     await saveAll(data);
   }
 
+  /**
+   * Delete a file
+   */
+  async function deleteFile(filename) {
+    const data = await getAll();
+    if (!data.files || !data.files[filename]) return;
+    delete data.files[filename];
+    const remaining = Object.keys(data.files);
+    data.activeFile = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+    await saveAll(data);
+    return data.activeFile;
+  }
+
+  /**
+   * Create a new file with default structure
+   */
   async function createFile(filename) {
     const files = await getFiles();
     if (files[filename]) {
@@ -78,35 +92,60 @@ const Storage = (() => {
     return data.files[filename];
   }
 
-  async function deleteFile(filename) {
-    const data = await getAll();
-    if (!data.files || !data.files[filename]) return;
-    delete data.files[filename];
-    const remaining = Object.keys(data.files);
-    data.activeFile = remaining.length > 0 ? remaining[remaining.length - 1] : null;
-    await saveAll(data);
-    return data.activeFile;
-  }
-
+  /**
+   * Rename a file
+   */
   async function renameFile(oldName, newName) {
     const data = await getAll();
-    if (!data.files || !data.files[oldName]) throw new Error('File not found.');
-    if (data.files[newName]) throw new Error(`File "${newName}" already exists.`);
+    if (!data.files || !data.files[oldName]) {
+      throw new Error('File not found.');
+    }
+    if (data.files[newName]) {
+      throw new Error(`File "${newName}" already exists.`);
+    }
     data.files[newName] = data.files[oldName];
     delete data.files[oldName];
     if (data.activeFile === oldName) data.activeFile = newName;
     await saveAll(data);
   }
 
+  /**
+   * Get the currently active file
+   */
+  async function getActiveFile() {
+    const data = await getAll();
+    return data.activeFile || null;
+  }
+
+  /**
+   * Set the currently active file
+   */
+  async function setActiveFile(filename) {
+    const data = await getAll();
+    data.activeFile = filename;
+    await saveAll(data);
+  }
+
+  /**
+   * Clear all local storage
+   */
+  async function clear() {
+    return new Promise((resolve) => {
+      chrome.storage.local.remove(STORAGE_KEY, resolve);
+    });
+  }
+
   return {
     getAll,
+    saveAll,
     getFiles,
-    getActiveFile,
-    setActiveFile,
     getFile,
     saveFile,
-    createFile,
     deleteFile,
+    createFile,
     renameFile,
+    getActiveFile,
+    setActiveFile,
+    clear,
   };
 })();

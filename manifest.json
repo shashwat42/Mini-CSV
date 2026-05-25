@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CSV Notes",
-  "version": "1.0.0",
-  "description": "Manage CSV files in a spreadsheet-like popup interface.",
+  "version": "2.0.0",
+  "description": "Manage CSV files in a spreadsheet-like popup interface with cloud sync.",
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -13,6 +13,10 @@
     "128": "assets/icon128.png"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://*.supabase.co/*"
   ]
 }

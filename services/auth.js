@@ -1,180 +1,190 @@
 'use strict';
 
-/**
- * Authentication Service
- * Handles Google OAuth login/logout and auth state management
- */
-
-/**
- * Sign in with Google OAuth
- * Returns the session if successful, null otherwise
- */
 async function signInWithGoogle() {
   try {
     const client = SupabaseService.getClient();
+
     if (!client) {
       throw new Error('Supabase not configured');
     }
 
-    // Use chrome.identity to handle OAuth in Manifest V3
-    const redirectUri = chrome.identity.getRedirectURL('supabase');
+    const redirectUri = chrome.identity.getRedirectURL();
 
-    // Ask Supabase for the provider URL (will include redirect)
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: redirectUri },
+      options: {
+        redirectTo: redirectUri,
+      },
     });
 
     if (error) {
-      console.error('Sign in error (requesting URL):', error);
+      console.error('OAuth URL generation failed:', error);
       return null;
     }
 
-    const url = data?.url;
+    const authUrl = data?.url;
 
-    if (!url) {
-      console.error('No OAuth URL returned by Supabase');
+    if (!authUrl) {
+      console.error('No OAuth URL returned');
       return null;
     }
 
-    // Launch the browser auth flow. This opens a window managed by Chrome.
     const redirectedTo = await new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow(
-        { url, interactive: true },
+        {
+          url: authUrl,
+          interactive: true,
+        },
         (redirectUrl) => {
           if (chrome.runtime.lastError) {
-            return reject(new Error(chrome.runtime.lastError.message));
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
           }
 
           if (!redirectUrl) {
-            return reject(new Error('Auth flow did not complete'));
+            reject(new Error('Authentication was not completed'));
+            return;
           }
 
           resolve(redirectUrl);
         }
       );
     }).catch((err) => {
-      console.warn('Auth flow cancelled or failed:', err.message || err);
+      console.warn('Login cancelled or failed:', err.message || err);
       return null;
     });
 
     if (!redirectedTo) {
-      // User cancelled or an error occurred
       return null;
     }
 
-    // After redirect, attempt to read the session from the client.
-    // Supabase SDK should exchange the code and persist the session for this origin.
-    const { data: sessionData, error: sessionError } = await client.auth.getSession();
+    const redirected = new URL(redirectedTo);
+
+    const accessToken =
+      redirected.hash.match(/access_token=([^&]*)/)?.[1];
+
+    const refreshToken =
+      redirected.hash.match(/refresh_token=([^&]*)/)?.[1];
+
+    if (!accessToken || !refreshToken) {
+      console.error('No auth tokens found in redirect URL');
+      return null;
+    }
+
+    const {
+      data: sessionData,
+      error: sessionError,
+    } = await client.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
 
     if (sessionError) {
-      console.warn('Failed to obtain session after OAuth redirect:', sessionError);
+      console.error('Failed to establish session:', sessionError);
       return null;
     }
 
     return sessionData;
   } catch (err) {
-    console.error('Sign in failed:', err);
+    console.error('Google sign-in failed:', err);
     return null;
   }
 }
 
-/**
- * Sign out current user
- * Clears local cache of files and auth state
- */
 async function signOut() {
   try {
     const client = SupabaseService.getClient();
+
     if (!client) {
       return;
     }
+
     const { error } = await client.auth.signOut();
+
     if (error) {
-      console.warn('Sign out error:', error);
+      console.warn('Sign out failed:', error);
     }
 
-    // Best-effort clear of local auth/session keys used by supabase-js
     try {
-      await chrome.storage.local.remove(['supabase.auth.token', 'csvNotesSync']);
-    } catch (e) {
-      // ignore
-    }
+      await chrome.storage.local.remove([
+        'supabase.auth.token',
+        'csvNotesSync',
+      ]);
+    } catch (_) {}
   } catch (err) {
-    console.error('Sign out failed:', err);
+    console.error('Logout failed:', err);
   }
 }
 
-/**
- * Get the current logged-in user
- * Returns user object or null
- */
 async function getCurrentUser() {
   try {
     const client = SupabaseService.getClient();
+
     if (!client) {
       return null;
     }
 
-    const { data: { user }, error } = await client.auth.getUser();
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser();
+
     if (error || !user) {
       return null;
     }
 
     return user;
   } catch (err) {
-    console.error('Get user failed:', err);
+    console.error('Failed to fetch current user:', err);
     return null;
   }
 }
 
-/**
- * Get current session
- */
 async function getSession() {
   try {
     const client = SupabaseService.getClient();
+
     if (!client) {
       return null;
     }
 
-    const { data: { session }, error } = await client.auth.getSession();
+    const {
+      data: { session },
+      error,
+    } = await client.auth.getSession();
+
     if (error) {
       return null;
     }
 
     return session;
   } catch (err) {
-    console.error('Get session failed:', err);
+    console.error('Failed to fetch session:', err);
     return null;
   }
 }
 
-/**
- * Listen for auth state changes
- * Calls callback whenever auth state changes (login/logout)
- */
 function onAuthStateChange(callback) {
   try {
     const client = SupabaseService.getClient();
+
     if (!client) {
       return null;
     }
 
-    const { data: { subscription } } = client.auth.onAuthStateChange(
-      (event, session) => {
-        callback(event, session);
-      }
-    );
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((event, session) => {
+      callback(event, session);
+    });
 
     return subscription;
   } catch (err) {
-    console.error('Auth state listener failed:', err);
+    console.error('Auth listener failed:', err);
     return null;
   }
 }
 
-// Export auth functions
 const AuthService = {
   signInWithGoogle,
   signOut,
